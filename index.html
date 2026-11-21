@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Komplete 26과 Crystalline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet">
+<style>
+/* ── SCRF 토큰 (PR-SCRF/design/tokens.css 에서 필요한 것만) ── */
+:root {
+  --white: #fbfdff;
+  --white-b: #f3f7fc;
+  --scrf-ink: #1b2230;
+  --scrf-ink-2: #4b5566;
+  --scrf-mute: #6a7486;
+  --scrf-faint: #8a93a3;
+  --scrf-cobalt: #1f3cff;
+  --scrf-gray-1: #8f97a6;
+  --scrf-gold: #c49a3c;
+  --scrf-font: "Pretendard Variable", Pretendard, "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+  --scrf-mono: ui-monospace, "SFMono-Regular", "DejaVu Sans Mono", monospace;
+  --scrf-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --wrap: 1124px;
+  --line: rgba(27, 34, 48, 0.18);
+
+  --win: rgba(234, 239, 246, 0.985);     /* 각 장의 창 */
+  --panel: #fdfeff;                     /* 창 위에 뜬 판 */
+  --panel-line: rgba(27, 34, 48, 0.25);
+  --ang: 20deg;                         /* 판을 옆으로 눕힌 정도 */
+
+  /* 마우스 -1 ~ 1 (배경과 렌즈용, JS가 부드럽게 따라가며 채운다) */
+  --px: 0;
+  --py: 0;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--white); scroll-behavior: smooth; scroll-padding-top: 88px; }
+body {
+  font-family: var(--scrf-font); color: var(--scrf-ink);
+  font-size: 16px; line-height: 1.75; word-break: keep-all;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden; padding-bottom: 120px;
+}
+a { color: inherit; text-decoration: none; }
+.mono { font-family: var(--scrf-mono); letter-spacing: 0.02em; }
+.wrap { width: min(var(--wrap), calc(100% - 48px)); margin: 0 auto; }
+p { color: var(--scrf-ink-2); }
+p + p { margin-top: 12px; }
+b { color: var(--scrf-ink); font-weight: 700; }
+h2 { font-size: 34px; line-height: 1.3; font-weight: 800; letter-spacing: -0.01em; }
+.lead { font-size: 17px; }
+.defs { position: absolute; }
+
+/* ═══════════ 배경: 흰 삼각 그리드 (white-grid.html) ═══════════ */
+.stage { position: fixed; inset: 0; perspective: 1400px; overflow: hidden; z-index: 0; pointer-events: none; }
+.world { position: absolute; inset: 0; transform: rotateY(calc(var(--px) * 2.2deg)) rotateX(calc(var(--py) * -1.6deg)) scale(1.08); }
+.world > * { position: absolute; inset: 0; }
+.paper {
+  background:
+    radial-gradient(70% 60% at 50% 42%, #ffffff 0%, rgba(255, 255, 255, 0) 70%),
+    linear-gradient(180deg, var(--white) 0%, #f7fafe 55%, var(--white-b) 100%);
+}
+.grid { opacity: 0.42; width: 100%; height: 100%; overflow: visible; transform: translate(calc(var(--px) * -10px), calc(var(--py) * -7px)); filter: url(#lineGlow); }
+.tri-line { fill: none; stroke: #9db0c2; stroke-opacity: 0.28; stroke-width: 0.8; }
+.tri-x { fill: none; stroke: #4c6780; stroke-opacity: 0.85; stroke-width: 1.4; stroke-linecap: round; }
+.leak { inset: auto; border-radius: 50%; mix-blend-mode: screen; filter: blur(40px); }
+.leak-a { width: 60vw; height: 60vw; left: 8vw; top: -22vw; background: radial-gradient(closest-side, rgba(255,255,255,0.95), rgba(236,246,255,0.5) 50%, rgba(236,246,255,0)); animation: driftA 26s ease-in-out infinite alternate; }
+.leak-b { width: 46vw; height: 46vw; right: -6vw; top: 30vh; background: radial-gradient(closest-side, rgba(255,255,255,0.9), rgba(228,242,255,0.45) 55%, rgba(228,242,255,0)); animation: driftB 32s ease-in-out infinite alternate; }
+.leak-c { width: 52vw; height: 40vw; left: -10vw; bottom: -18vw; background: radial-gradient(closest-side, rgba(255,255,255,0.85), rgba(240,248,255,0.4) 55%, rgba(240,248,255,0)); animation: driftC 29s ease-in-out infinite alternate; }
+@keyframes driftA { to { transform: translate(14vw, 8vh) scale(1.1); } }
+@keyframes driftB { to { transform: translate(-12vw, -10vh) scale(0.92); } }
+@keyframes driftC { to { transform: translate(18vw, -6vh) scale(1.08); } }
+
+/* ═══════════ 화면 효과 (원본보다 옅게): 가장자리 색수차 · 블러, 빛 번짐, 비네트, 입자 ═══════════ */
+.lens { display: contents; --lx: calc(50% - var(--px) * 6%); --ly: calc(50% - var(--py) * 6%); }
+.lens > * { position: fixed; inset: 0; pointer-events: none; z-index: 50; }
+.lens-ca {
+  backdrop-filter: url(#lensCA);
+  mask: radial-gradient(ellipse 84% 82% at var(--lx) var(--ly), transparent 72%, rgba(0,0,0,0.45) 88%, rgba(0,0,0,0.7) 100%);
+  -webkit-mask: radial-gradient(ellipse 84% 82% at var(--lx) var(--ly), transparent 72%, rgba(0,0,0,0.45) 88%, rgba(0,0,0,0.7) 100%);
+}
+.lens-blur {
+  backdrop-filter: blur(1.6px); -webkit-backdrop-filter: blur(1.6px);
+  mask: radial-gradient(ellipse 84% 82% at var(--lx) var(--ly), transparent 72%, rgba(0,0,0,0.5) 88%, #000 100%);
+  -webkit-mask: radial-gradient(ellipse 84% 82% at var(--lx) var(--ly), transparent 72%, rgba(0,0,0,0.5) 88%, #000 100%);
+}
+.bloom { backdrop-filter: blur(14px) brightness(1.04) saturate(1.08); -webkit-backdrop-filter: blur(14px) brightness(1.04) saturate(1.08); opacity: 0.22; }
+.lens-vignette { background: radial-gradient(ellipse 86% 82% at var(--lx) var(--ly), transparent 60%, rgba(44, 70, 96, 0.05) 84%, rgba(36, 60, 86, 0.14) 100%); }
+.grain {
+  inset: -50% !important;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  opacity: 0.03; mix-blend-mode: multiply; animation: grain 0.9s steps(3) infinite;
+}
+@keyframes grain { 33% { transform: translate(-3%, 2%); } 66% { transform: translate(2%, -4%); } }
+
+/* ═══ 위 내비게이션 (목차) ═══ */
+.nav { position: sticky; top: 0; z-index: 10; background: rgba(251, 253, 255, 0.92); border-bottom: 1px solid rgba(27, 34, 48, 0.08); }
+.nav .wrap { display: flex; align-items: stretch; height: 64px; }
+.tabs { display: flex; gap: 4px; margin-left: -14px; }
+.tab { display: flex; align-items: center; gap: 8px; padding: 0 14px; border-top: 2px solid transparent; margin-top: -1px; font-size: 14px; color: var(--scrf-mute); transition: color 0.2s; }
+.tab-num { font-family: var(--scrf-mono); font-size: 13px; color: var(--scrf-gray-1); transition: color 0.2s; }
+.tab:hover, .tab:hover .tab-num { color: var(--scrf-cobalt); }
+.tab.is-on { border-top-color: var(--scrf-cobalt); color: var(--scrf-cobalt); font-weight: 700; }
+.tab.is-on .tab-num { color: var(--scrf-cobalt); }
+
+main { position: relative; z-index: 1; }
+
+/* ═══ 창 (각 장) ═══ */
+.sec { padding: 56px 0 0; }
+.sec.first { padding-top: 40px; }
+.win { position: relative; background: var(--win); padding: 18px 56px 60px; }
+.win + .win { margin-top: 28px; }
+.win-bar { display: flex; justify-content: flex-end; align-items: center; margin: 0 -38px 34px; padding: 0 0 14px; border-bottom: 1px solid rgba(27, 34, 48, 0.14); }
+.ctl { display: flex; gap: 6px; }
+.ctl i { width: 8px; height: 8px; background: rgba(27, 34, 48, 0.2); }
+.ctl i:last-child { background: var(--scrf-cobalt); }
+.pin { position: absolute; width: 14px; height: 14px; }
+.pin::before, .pin::after { content: ""; position: absolute; background: var(--scrf-ink); }
+.pin::before { left: 0; right: 0; height: 1px; } .pin::after { top: 0; bottom: 0; width: 1px; }
+.pin-tl { left: -8px; top: -8px; } .pin-tl::before { top: 0; } .pin-tl::after { left: 0; }
+.pin-br { right: -8px; bottom: -8px; } .pin-br::before { bottom: 0; } .pin-br::after { right: 0; }
+
+/* ═══ 마우스 반응 (텍스트 제외 모든 요소) — JS가 --mx, --my(-1~1)를 채운다 ═══ */
+[data-inter] { transition: transform 0.35s var(--scrf-ease); will-change: transform; }
+[data-inter].is-hover { transition: transform 0.12s linear; }
+.win[data-inter] { transform: perspective(2400px) rotateY(calc(var(--mx, 0) * 0.8deg)) rotateX(calc(var(--my, 0) * -0.8deg)); }
+
+/* ═══ 창 위에 뜬 작은 창 (이미지 · 재생기) ═══ */
+.mini { position: relative; background: var(--panel); display: flex; flex-direction: column; }
+.mini-bar { flex: none; height: 26px; display: flex; align-items: center; justify-content: flex-end; padding: 0 10px; background: #dde3ec; border-top: 1px solid var(--panel-line); border-bottom: 1px solid rgba(27, 34, 48, 0.08); }
+.mini-bar .ctl i { width: 7px; height: 7px; }
+.tilt { perspective: 1100px; perspective-origin: 50% 50%; }
+
+/* ═══ 01 요약 ═══ */
+.hero-card {
+  position: relative; overflow: hidden; border-radius: 10px; isolation: isolate; color: #fff;
+  min-height: 420px; padding: 46px 48px; display: flex; flex-direction: column; align-items: flex-start; gap: 30px;
+}
+.art-now {
+  position: absolute; inset: 0; z-index: -2;
+  background:
+    linear-gradient(180deg, rgba(8, 14, 40, 0) 45%, rgba(8, 14, 40, 0.6) 100%),
+    radial-gradient(40% 40% at 22% 100%, rgba(255, 214, 150, 0.45), rgba(255, 214, 150, 0) 70%),
+    linear-gradient(180deg, transparent 0 70%, rgba(200, 212, 230, 0.55) 70% 71%, transparent 71%),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0 1px, transparent 1px 44px),
+    linear-gradient(180deg, #0b1a6e 0%, #1f3cff 42%, #6f86e8 68%, #aeb6c6 100%);
+}
+.wt { position: absolute; right: 0; top: 50%; width: 64%; height: auto; z-index: -1; transform: translateY(-50%); }
+.wt path { fill: none; stroke: #eaeff6; stroke-linejoin: round; }   /* 창 색 — 박스가 뚫린 것처럼 */
+.hero h1 { font-size: 56px; line-height: 1.15; font-weight: 800; letter-spacing: -0.02em; }
+.hero-stats { display: flex; gap: 44px; }
+.hero-stat { display: grid; gap: 2px; }
+.hero-stat span { font-size: 12px; color: rgba(255, 255, 255, 0.72); }
+.hero-stat strong { font-family: var(--scrf-mono); font-size: 30px; font-weight: 700; line-height: 1.2; }
+.hero-foot { position: absolute; left: 48px; right: 48px; bottom: 26px; display: flex; justify-content: space-between; gap: 24px; font-size: 14px; color: rgba(255, 255, 255, 0.82); }
+.hero-foot .mono { font-size: 12px; color: rgba(255, 255, 255, 0.6); }
+
+/* ═══ 02 기초 ═══ */
+.split { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 56px; align-items: center; }
+.bars { display: grid; gap: 14px; margin-top: 56px; perspective: 900px; perspective-origin: 50% 50%; }
+.bar {
+  position: relative; display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: baseline; gap: 14px;
+  width: 100%; padding: 14px 22px 13px; border: 0; border-top: 1px solid var(--panel-line); background: var(--panel);
+  text-align: left; font: inherit; color: inherit; cursor: pointer;
+  transform: rotateY(calc(var(--ang) + var(--mx, 0) * 5deg)) rotateX(calc(var(--my, 0) * -6deg)) translateZ(var(--z, 0px));
+}
+.bar:hover { --z: 6px; }
+.bar.is-on { --z: 14px; border-top: 2px solid var(--scrf-cobalt); padding-top: 12px; }
+.li-code { font-family: var(--scrf-mono); font-size: 12px; color: var(--scrf-mute); transition: color 0.2s; }
+.li-name { font-weight: 700; white-space: nowrap; transition: color 0.2s; }
+.li-desc { font-size: 13px; color: var(--scrf-ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.li-en { font-family: var(--scrf-mono); font-size: 12px; color: var(--scrf-faint); }
+.bar:hover .li-name, .bar.is-on .li-name, .bar.is-on .li-code { color: var(--scrf-cobalt); }
+
+.viewer { aspect-ratio: 5 / 6; margin: 10px 0; transform: rotateY(calc(var(--ang) * -1 + var(--mx, 0) * 6deg)) rotateX(calc(var(--my, 0) * -6deg)); }
+.viewer-in { position: relative; flex: 1; overflow: hidden; background: #f1f3f7; margin: 10px; border: 1px solid rgba(27, 34, 48, 0.32); }
+.viewer-in img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 0; }
+.viewer-in img.fit-contain { object-fit: contain; object-position: 50% 50%; }
+.viewer-in > * { animation: fade 0.35s var(--scrf-ease); }
+.viewer-in::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(0deg, rgba(14, 18, 30, 0.88) 0%, rgba(14, 18, 30, 0.6) 32%, rgba(14, 18, 30, 0) 62%); }
+.v-text { position: absolute; left: 24px; right: 24px; bottom: 22px; z-index: 1; color: #fff; }
+.v-text .tag { display: inline-block; margin-bottom: 10px; padding: 3px 8px; background: rgba(14, 18, 30, 0.82); font-family: var(--scrf-mono); font-size: 11px; letter-spacing: 0.12em; color: rgba(255, 255, 255, 0.9); }
+.v-text h3 { font-size: clamp(22px, 2.3vw, 30px); line-height: 1.15; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 10px; }
+.v-text p { color: rgba(255, 255, 255, 0.9); font-size: 14.5px; line-height: 1.65; font-weight: 500; }
+@keyframes fade { from { opacity: 0; } }
+
+/* ═══ 03 Komplete ═══ */
+.k-hero { position: relative; height: 380px; margin-bottom: 40px; transform: perspective(1800px) rotateY(calc(var(--mx, 0) * 2deg)) rotateX(calc(var(--my, 0) * -2deg)); }
+.k-cut { position: absolute; inset: 0; clip-path: polygon(0 0, 64% 0, 46% 100%, 0 100%); }
+.k-cut img { position: absolute; left: 0; top: 0; width: 64%; height: 100%; object-fit: cover; object-position: 40% 50%; border-radius: 10px 0 0 10px; filter: blur(1.2px) saturate(1.05); transform: scale(1.03); transform-origin: left center; }
+.k-cut::after { content: ""; position: absolute; left: 0; top: 0; width: 64%; height: 100%; background: linear-gradient(90deg, rgba(22, 6, 26, 0.62) 0%, rgba(22, 6, 26, 0.42) 60%, rgba(22, 6, 26, 0.2) 100%); }
+.k-stripe { position: absolute; inset: 0; background: #eaeff6; }
+.k-stripe.a { clip-path: polygon(50% 0, 53.5% 0, 35.5% 100%, 32% 100%); }
+.k-stripe.b { clip-path: polygon(57.5% 0, 59.5% 0, 41.5% 100%, 39.5% 100%); }
+.k-title { position: absolute; left: 6%; right: 0; top: 50%; transform: translateY(-50%); font-size: 104px; line-height: 1.04; font-weight: 800; letter-spacing: -0.03em; color: var(--scrf-ink); pointer-events: none; }
+.k-title small { display: block; font-size: 22px; font-weight: 700; letter-spacing: 0; margin-bottom: 10px; }
+.k-on { position: absolute; inset: 0; pointer-events: none; }
+.k-on.s1 { clip-path: polygon(0 0, 50% 0, 32% 100%, 0 100%); }
+.k-on.s2 { clip-path: polygon(53.5% 0, 57.5% 0, 39.5% 100%, 35.5% 100%); }
+.k-on.s3 { clip-path: polygon(59.5% 0, 64% 0, 46% 100%, 41.5% 100%); }
+.k-on .k-title { color: #fff; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.25); }
+.k-lead { max-width: 720px; }
+.extra { max-width: 560px; margin: 40px auto 0; padding-top: 16px; border-top: 1px solid var(--line); text-align: center; }
+.extra span { display: block; font-size: 12px; color: var(--scrf-mute); margin-bottom: 4px; }
+.extra p { font-size: 15px; }
+
+/* 카드 3장 — 이미지 위 제목 글자 반전 (Komplete 제목과 같은 방식) */
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; }
+.card {
+  position: relative; background: var(--panel); border-top: 1px solid var(--panel-line); display: flex; flex-direction: column;
+  transform: translateZ(var(--tz, 0px)) rotateY(calc(var(--ry, 0deg) + var(--mx, 0) * 6deg)) rotateX(calc(var(--my, 0) * -6deg));
+}
+.card:nth-child(1) { --ry: calc(var(--ang) * 0.8); }
+.card:nth-child(2) { --tz: -70px; }
+.card:nth-child(3) { --ry: calc(var(--ang) * -0.8); }
+.c-art { position: relative; height: 390px; overflow: hidden; }
+.c-cut { position: absolute; inset: 0; }
+.c-cut img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.c-cut::after { content: ""; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(14, 18, 30, 0.9) 0%, rgba(14, 18, 30, 0.72) 48%, rgba(14, 18, 30, 0.12) 100%); }
+.c-cut img.shift-up { height: 130%; top: -22%; }   /* 이미지 속 로고가 글자 뒤로 오지 않게 */
+.c-stripe { position: absolute; inset: 0; background: var(--panel); }
+.c-stripe { display: none; }   /* 사선 줄 없음 */
+.c-text { position: absolute; left: 22px; right: 22px; bottom: 22px; color: var(--scrf-ink); pointer-events: none; }
+.c-text h3, .c-text .h3 { display: block; font-size: clamp(24px, 2.6vw, 36px); line-height: 1.12; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 12px; }
+.c-text p { color: inherit; font-size: 14.5px; line-height: 1.65; font-weight: 500; }
+.c-on { position: absolute; inset: 0; pointer-events: none; }
+.c-on.s1 { }
+.c-on.s2, .c-on.s3 { display: none; }
+.c-on .c-text { color: #fff; }
+.card .tag { position: absolute; left: 22px; top: 18px; padding: 3px 8px; background: rgba(14, 18, 30, 0.82); font-family: var(--scrf-mono); font-size: 11px; color: rgba(255, 255, 255, 0.9); letter-spacing: 0.12em; }
+
+/* 광고 띠 창 */
+.win.ad { padding: 16px; }
+.ad img { display: block; width: 100%; height: auto; transform: perspective(1600px) rotateX(calc(var(--my, 0) * -3deg)) rotateY(calc(var(--mx, 0) * 1.5deg)); transition: transform 0.35s var(--scrf-ease); }
+
+/* ═══ 04 리버브 ═══ */
+.r-split { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; }
+.ui-fig { transform: rotateY(calc(var(--ang) * -1 + var(--mx, 0) * 6deg)) rotateX(calc(var(--my, 0) * -6deg)); }
+.ui-fig img { display: block; width: calc(100% - 24px); height: auto; margin: 12px; border: 1px solid rgba(27, 34, 48, 0.32); }
+.ab { margin-top: 56px; display: grid; grid-template-columns: 1fr 1fr; gap: 56px; }
+.track:first-child { --ry: var(--ang); }
+.track:last-child { --ry: calc(var(--ang) * -1); }
+.track { transform: rotateY(calc(var(--ry) + var(--mx, 0) * 6deg)) rotateX(calc(var(--my, 0) * -6deg)); }
+.track.is-playing .mini-bar { border-top: 2px solid var(--scrf-cobalt); }
+.t-body { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px 14px; padding: 18px 20px 20px; }
+.t-body .wave { grid-column: 1 / -1; grid-row: 2; }
+.t-body .t-time { grid-column: 3; grid-row: 1; }
+.play {
+  width: 44px; height: 44px; border-radius: 50%; border: 0; cursor: pointer;
+  background: var(--scrf-ink); display: grid; place-items: center; transition: background 0.3s var(--scrf-ease), transform 0.3s var(--scrf-ease);
+}
+.play:hover { transform: scale(1.08); }
+.play svg { width: 16px; height: 16px; fill: #fff; }
+.play .i-pause { display: none; }
+.track.is-playing .play { background: var(--scrf-cobalt); }
+.track.is-playing .i-play { display: none; }
+.track.is-playing .i-pause { display: block; }
+.t-name { font-weight: 800; transition: color 0.2s; }
+.track.is-playing .t-name { color: var(--scrf-cobalt); }
+.wave { position: relative; height: 56px; cursor: pointer; }
+.wave svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wave .w-base rect { fill: rgba(27, 34, 48, 0.2); transition: fill 0.2s; }
+.wave:hover .w-base rect { fill: rgba(27, 34, 48, 0.32); }
+.wave .w-top { position: absolute; inset: 0; width: 0; overflow: hidden; }
+.wave .w-top rect { fill: var(--scrf-ink); }
+.track.is-reverb .wave .w-top rect { fill: var(--scrf-cobalt); }
+.wave .w-end { position: absolute; top: 4px; bottom: 4px; width: 1px; background: rgba(27, 34, 48, 0.35); }
+.wave .w-hover { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--scrf-cobalt); opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+.wave:hover .w-hover { opacity: 0.6; }
+.t-time { font-family: var(--scrf-mono); font-size: 12px; color: var(--scrf-mute); text-align: right; }
+
+/* ═══ 05 총 비용 ═══ */
+.table { border-top: 1px solid var(--line); }
+.t-row { display: grid; grid-template-columns: 1.3fr 1.2fr 0.8fr 0.8fr; gap: 24px; align-items: baseline; padding: 16px 12px; border-bottom: 1px solid rgba(27, 34, 48, 0.1); transition: background 0.25s; }
+.t-row:not(.t-head):hover { background: rgba(255, 255, 255, 0.7); }
+.t-row > * { min-width: 0; }
+.t-head { padding: 12px; font-size: 12px; color: var(--scrf-mute); }
+.t-row .mono { font-size: 15px; }
+.t-row s { color: var(--scrf-faint); }
+.t-sale { font-weight: 700; }
+.t-total { border-bottom: 0; border-top: 1px solid var(--scrf-ink); margin-top: -1px; }
+.t-total .t-sale { color: var(--scrf-cobalt); font-size: 18px; }
+.t-sub { display: block; font-size: 13px; color: var(--scrf-mute); }
+.t-note { margin-top: 12px; font-size: 12px; color: var(--scrf-mute); }
+
+/* ── 좁은 화면 ── */
+@media (max-width: 900px) {
+  .wrap { width: calc(100% - 24px); }
+  .win { padding: 14px 16px 28px; }
+  .win-bar { margin: 0 -4px 22px; }
+  .tab span:not(.tab-num) { display: none; }
+  .tabs { margin-left: -9px; }
+  .tab { padding: 0 9px; }
+  h2 { font-size: 27px; }
+  .hero h1 { font-size: 28px; }
+  .hero-card { min-height: 320px; padding: 30px 26px; gap: 22px; }
+  .hero-stats { gap: 22px; }
+  .hero-stat strong { font-size: 21px; }
+  .wt { position: relative; right: auto; top: auto; transform: none; width: calc(100% + 26px); align-self: flex-end; margin: -4px -26px -8px 0; order: 1; }
+  .hero-foot { position: static; order: 2; flex-direction: column; gap: 4px; font-size: 13px; margin-top: 8px; }
+  .split, .r-split { grid-template-columns: minmax(0, 1fr); gap: 36px; }
+  .bar, .viewer, .card, .ui-fig, .track, .hero-card, .k-hero, .win[data-inter] { transform: none !important; }
+  .li-desc, .li-en { display: none; }
+  .viewer { aspect-ratio: 4 / 4.4; }
+  .k-hero { height: 260px; }
+  .k-title { font-size: 46px; left: 5%; }
+  .k-title small { font-size: 16px; }
+  .cards { grid-template-columns: 1fr; }
+  .ab { grid-template-columns: 1fr; gap: 16px; }
+  .t-row { grid-template-columns: 1.4fr 0.8fr 0.8fr; gap: 12px; }
+  .t-row .t-kind { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+<svg class="defs" width="0" height="0" aria-hidden="true" focusable="false">
+  <defs>
+    <!-- 렌즈 색수차 — 화면 위 렌즈 층의 backdrop-filter로만 쓴다. 벌어지는 양은 JS가 바꾼다 (원본보다 약하게) -->
+    <filter id="lensCA" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feColorMatrix in="SourceGraphic" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="r"/>
+      <feOffset in="r" dx="-1" dy="0" result="r1" data-ca="r"/>
+      <feMerge result="r2"><feMergeNode in="r"/><feMergeNode in="r1"/></feMerge>
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="g"/>
+      <feColorMatrix in="SourceGraphic" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="b"/>
+      <feOffset in="b" dx="1" dy="0" result="b1" data-ca="b"/>
+      <feMerge result="b2"><feMergeNode in="b"/><feMergeNode in="b1"/></feMerge>
+      <feBlend in="r2" in2="g" mode="screen" result="rg"/>
+      <feBlend in="rg" in2="b2" mode="screen" result="split"/>
+      <feColorMatrix in="split" type="saturate" values="1.1" result="vivid"/>
+      <feComponentTransfer in="vivid">
+        <feFuncR type="linear" slope="1.03" intercept="0.01"/>
+        <feFuncG type="linear" slope="1.03" intercept="0.01"/>
+        <feFuncB type="linear" slope="1.03" intercept="0.01"/>
+      </feComponentTransfer>
+    </filter>
+    <pattern id="tri" width="120" height="207.846" patternUnits="userSpaceOnUse">
+      <path class="tri-line" d="M0 0H120M0 103.92H120M0 0L120 207.85M120 0L0 207.85"/>
+      <path class="tri-x" d="M-5.00 -8.66L5.00 8.66M5.00 -8.66L-5.00 8.66M115.00 -8.66L125.00 8.66M125.00 -8.66L115.00 8.66M55.00 95.26L65.00 112.58M65.00 95.26L55.00 112.58M-5.00 199.19L5.00 216.51M5.00 199.19L-5.00 216.51M115.00 199.19L125.00 216.51M125.00 199.19L115.00 216.51"/>
+    </pattern>
+    <filter id="lineGlow" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="g1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="9" result="g2"/>
+      <feMerge><feMergeNode in="g2"/><feMergeNode in="g1"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+</svg>
+
+<!-- 배경: 마우스에 따라 조금 기운다 -->
+<div class="stage" aria-hidden="true">
+  <div class="world">
+    <div class="paper"></div>
+    <svg class="grid"><rect x="-120" y="-120" width="120%" height="120%" fill="url(#tri)"/></svg>
+    <div class="leak leak-a"></div><div class="leak leak-b"></div><div class="leak leak-c"></div>
+  </div>
+</div>
+
+<!-- ═══ 위 내비게이션 (목차) ═══ -->
+<header class="nav">
+  <div class="wrap">
+    <nav class="tabs">
+      <a class="tab is-on" href="#s1"><span class="tab-num">01</span><span>요약</span></a>
+      <a class="tab" href="#s2"><span class="tab-num">02</span><span>기초</span></a>
+      <a class="tab" href="#s3"><span class="tab-num">03</span><span>Komplete</span></a>
+      <a class="tab" href="#s4"><span class="tab-num">04</span><span>리버브</span></a>
+      <a class="tab" href="#s5"><span class="tab-num">05</span><span>비용</span></a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- ═══ 01 요약 ═══ -->
+  <section class="sec first hero" id="s1">
+    <div class="wrap"><div class="win"><span class="pin pin-tl"></span><span class="pin pin-br"></span>
+      <div class="win-bar"><div class="ctl"><i></i><i></i><i></i></div></div>
+      <article class="hero-card">
+        <div class="art-now"></div>
+        <svg class="wt" id="wt" viewBox="0 0 700 260" preserveAspectRatio="xMaxYMid meet" aria-hidden="true"></svg>
+        <h1>Komplete 26과<br>Crystalline</h1>
+        <div class="hero-stats">
+          <div class="hero-stat"><span>합계 할인가</span><strong>$280.00</strong></div>
+          <div class="hero-stat"><span>Crystalline 할인 종료</span><strong>12.09</strong></div>
+        </div>
+        <div class="hero-foot"><span>곡 작업에 쓸 악기 묶음과 리버브 효과를 함께 구매하려고 합니다</span><span class="mono">2026.11.21 판매 페이지 기준</span></div>
+      </article>
+    </div></div>
+  </section>
+
+  <!-- ═══ 02 기초 ═══ -->
+  <section class="sec" id="s2">
+    <div class="wrap"><div class="win" data-inter><span class="pin pin-tl"></span><span class="pin pin-br"></span>
+      <div class="win-bar"><div class="ctl"><i></i><i></i><i></i></div></div>
+      <div class="split tilt">
+        <div>
+          <h2>먼저, 이 물건들이 무엇인지</h2>
+          <p class="lead" style="margin-top:18px">컴퓨터로 음악을 만들 때는 <b>작업 프로그램</b> 하나에, 그 안에 끼워 쓰는 <b>악기와 효과 도구</b>를 추가로 설치해서 씁니다.</p>
+          <p>지금 쓰고 있는 작업 프로그램만으로는 쓸 수 있는 악기 소리와 효과가 한정되어 있습니다. 이번에 사려는 두 가지는 모두 이 작업 프로그램 안에 끼워 쓰는 도구입니다.</p>
+          <div class="bars">
+            <button class="bar is-on" type="button" data-key="daw" data-inter><span class="li-code">DAW</span><span class="li-name">작업실 프로그램</span></button>
+            <button class="bar" type="button" data-key="plugin" data-inter><span class="li-code">PLUG-IN</span><span class="li-name">작업실에 들여놓는 도구</span></button>
+            <button class="bar" type="button" data-key="bundle" data-inter><span class="li-code">BUNDLE</span><span class="li-name">도구를 묶은 세트</span></button>
+            <button class="bar" type="button" data-key="reverb" data-inter><span class="li-code">REVERB</span><span class="li-name">소리에 공간을 입히는 도구</span></button>
+          </div>
+        </div>
+        <figure class="viewer mini" data-inter><div class="mini-bar"><div class="ctl"><i></i><i></i><i></i></div></div><div class="viewer-in" id="viewer"></div></figure>
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ═══ 03 Komplete ═══ -->
+  <section class="sec" id="s3">
+    <div class="wrap">
+      <div class="win" data-inter><span class="pin pin-tl"></span><span class="pin pin-br"></span>
+        <div class="win-bar"><div class="ctl"><i></i><i></i><i></i></div></div>
+        <div class="k-hero" aria-label="Komplete 26 Standard" data-inter>
+          <div class="k-cut"><img src="img/komplete-hero.jpg" alt=""></div>
+          <div class="k-stripe a"></div><div class="k-stripe b"></div>
+          <h2 class="k-title"><small>Native Instruments</small>Komplete 26<br>Standard</h2>
+          <div class="k-on s1" aria-hidden="true"><div class="k-title"><small>Native Instruments</small>Komplete 26<br>Standard</div></div><div class="k-on s2" aria-hidden="true"><div class="k-title"><small>Native Instruments</small>Komplete 26<br>Standard</div></div><div class="k-on s3" aria-hidden="true"><div class="k-title"><small>Native Instruments</small>Komplete 26<br>Standard</div></div>
+        </div>
+        <p class="lead k-lead"><b>Native Instruments</b>는 1996년 독일 베를린에서 시작한 음악 소프트웨어·장비 회사입니다. 이 회사의 대표 상품이 악기와 효과를 묶은 <b>Komplete</b>이고, 이번에 사려는 것은 그 중간 등급인 <b>Standard</b>입니다.</p>
+        <div class="extra"><span>그 밖에 들어 있는 것</span><p>Massive X, Guitar Rig 7 Pro, Absynth 6 등 신디사이저, 드럼, 효과가 함께 들어 있습니다.</p></div>
+      </div>
+
+      <!-- 카드 3장은 고유 창 -->
+      <div class="win" data-inter><span class="pin pin-tl"></span><span class="pin pin-br"></span>
+        <div class="win-bar"><div class="ctl"><i></i><i></i><i></i></div></div>
+        <div class="cards tilt">
+          <article class="card" data-inter>
+            <div class="c-art"><div class="c-cut"><img src="img/massive.jpg" alt=""></div><div class="c-stripe a"></div><div class="c-stripe b"></div><div class="c-text"><h3>Massive</h3><p>굵은 베이스와 날카로운 리드 소리를 만드는 신디사이저입니다. 지금 연습하고 있는 전자음악 베이스 소리를 만드는 데 바로 씁니다.</p></div><div class="c-on s1" aria-hidden="true"><div class="c-text"><span class="h3">Massive</span><p>굵은 베이스와 날카로운 리드 소리를 만드는 신디사이저입니다. 지금 연습하고 있는 전자음악 베이스 소리를 만드는 데 바로 씁니다.</p></div></div><div class="c-on s2" aria-hidden="true"><div class="c-text"><span class="h3">Massive</span><p>굵은 베이스와 날카로운 리드 소리를 만드는 신디사이저입니다. 지금 연습하고 있는 전자음악 베이스 소리를 만드는 데 바로 씁니다.</p></div></div><div class="c-on s3" aria-hidden="true"><div class="c-text"><span class="h3">Massive</span><p>굵은 베이스와 날카로운 리드 소리를 만드는 신디사이저입니다. 지금 연습하고 있는 전자음악 베이스 소리를 만드는 데 바로 씁니다.</p></div></div><span class="tag">SYNTH</span></div>
+          </article>
+          <article class="card" data-inter>
+            <div class="c-art"><div class="c-cut"><img src="img/session.jpg" alt=""></div><div class="c-stripe a"></div><div class="c-stripe b"></div><div class="c-text"><h3>Session 시리즈</h3><p>실제 연주자의 기타·타악기 연주를 녹음해 둔 악기입니다. 직접 칠 수 없는 악기 파트도 곡에 자연스럽게 넣을 수 있습니다.</p></div><div class="c-on s1" aria-hidden="true"><div class="c-text"><span class="h3">Session 시리즈</span><p>실제 연주자의 기타·타악기 연주를 녹음해 둔 악기입니다. 직접 칠 수 없는 악기 파트도 곡에 자연스럽게 넣을 수 있습니다.</p></div></div><div class="c-on s2" aria-hidden="true"><div class="c-text"><span class="h3">Session 시리즈</span><p>실제 연주자의 기타·타악기 연주를 녹음해 둔 악기입니다. 직접 칠 수 없는 악기 파트도 곡에 자연스럽게 넣을 수 있습니다.</p></div></div><div class="c-on s3" aria-hidden="true"><div class="c-text"><span class="h3">Session 시리즈</span><p>실제 연주자의 기타·타악기 연주를 녹음해 둔 악기입니다. 직접 칠 수 없는 악기 파트도 곡에 자연스럽게 넣을 수 있습니다.</p></div></div><span class="tag">SESSION</span></div>
+          </article>
+          <article class="card" data-inter>
+            <div class="c-art"><div class="c-cut"><img src="img/kontakt.jpg" alt="" class="shift-up"></div><div class="c-stripe a"></div><div class="c-stripe b"></div><div class="c-text"><h3>Kontakt 8 정품</h3><p>녹음된 악기 소리를 불러와 연주하는 프로그램입니다. 다른 회사의 악기 중에도 정품 Kontakt가 있어야만 열리는 것이 많습니다.</p></div><div class="c-on s1" aria-hidden="true"><div class="c-text"><span class="h3">Kontakt 8 정품</span><p>녹음된 악기 소리를 불러와 연주하는 프로그램입니다. 다른 회사의 악기 중에도 정품 Kontakt가 있어야만 열리는 것이 많습니다.</p></div></div><div class="c-on s2" aria-hidden="true"><div class="c-text"><span class="h3">Kontakt 8 정품</span><p>녹음된 악기 소리를 불러와 연주하는 프로그램입니다. 다른 회사의 악기 중에도 정품 Kontakt가 있어야만 열리는 것이 많습니다.</p></div></div><div class="c-on s3" aria-hidden="true"><div class="c-text"><span class="h3">Kontakt 8 정품</span><p>녹음된 악기 소리를 불러와 연주하는 프로그램입니다. 다른 회사의 악기 중에도 정품 Kontakt가 있어야만 열리는 것이 많습니다.</p></div></div><span class="tag">SAMPLER</span></div>
+          </article>
+          
+        </div>
+      </div>
+
+      <!-- 광고 띠 창 -->
+      <div class="win ad" data-inter><span class="pin pin-tl"></span><span class="pin pin-br"></span>
+        <img src="img/komplete-price.png" alt="Komplete 26 Standard 판매 페이지: 정가 $549.00, 할인가 $274.50">
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══ 04 리버브 ═══ -->
+  <section class="sec" id="s4">
+    <div class="wrap"><div class="win" data-inter><span class="pin pin-tl"></span><span class="pin pin-br"></span>
+      <div class="win-bar"><div class="ctl"><i></i><i></i><i></i></div></div>
+      <div class="r-split tilt">
+        <div>
+          <h2>Crystalline 리버브</h2>
+          <p class="lead" style="margin-top:18px">소리에 공간의 울림을 더하는 효과입니다. 작은 방부터 큰 공연장까지, 소리를 원하는 공간에 옮겨 놓는 도구입니다.</p>
+        </div>
+        <figure class="ui-fig mini" data-inter><div class="mini-bar"><div class="ctl"><i></i><i></i><i></i></div></div><img src="img/crystalline-ui.png" alt="Crystalline 리버브 플러그인 화면"></figure>
+      </div>
+      <div class="ab tilt">
+        <div class="track mini" data-src="audio/dry.wav" data-key="dry" data-inter>
+          <div class="mini-bar"><div class="ctl"><i></i><i></i><i></i></div></div>
+          <div class="t-body"><button class="play" type="button" aria-label="리버브 없음 재생"><svg class="i-play" viewBox="0 0 16 16"><path d="M4 2.5v11l9.5-5.5z"/></svg><svg class="i-pause" viewBox="0 0 16 16"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z"/></svg></button><div class="t-name">리버브 없음</div><div class="wave"></div><span class="t-time">4.6초</span></div>
+        </div>
+        <div class="track mini is-reverb" data-src="audio/reverb.wav" data-key="reverb" data-inter>
+          <div class="mini-bar"><div class="ctl"><i></i><i></i><i></i></div></div>
+          <div class="t-body"><button class="play" type="button" aria-label="리버브 있음 재생"><svg class="i-play" viewBox="0 0 16 16"><path d="M4 2.5v11l9.5-5.5z"/></svg><svg class="i-pause" viewBox="0 0 16 16"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z"/></svg></button><div class="t-name">리버브 있음</div><div class="wave"></div><span class="t-time">5.9초</span></div>
+        </div>
+        
+      </div>
+    </div></div>
+  </section>
+
+  <!-- ═══ 05 총 비용 ═══ -->
+  <section class="sec" id="s5">
+    <div class="wrap"><div class="win" data-inter><span class="pin pin-tl"></span><span class="pin pin-br"></span>
+      <div class="win-bar"><div class="ctl"><i></i><i></i><i></i></div></div>
+      <h2 style="margin-bottom:28px">총 비용</h2>
+      <div class="table">
+        <div class="t-row t-head"><span>항목</span><span class="t-kind">종류</span><span>정가</span><span>할인가</span></div>
+        <div class="t-row"><span><b>Komplete 26 Standard</b><span class="t-sub">Native Instruments</span></span><span class="t-kind">악기·효과 묶음</span><span class="mono"><s>$549.00</s></span><span class="mono t-sale">$274.50</span></div>
+        <div class="t-row"><span><b>Crystalline</b><span class="t-sub">BABY Audio · 12월 9일까지</span></span><span class="t-kind">리버브 효과</span><span class="mono"><s>$108.90</s></span><span class="mono t-sale">$5.50</span></div>
+        <div class="t-row t-total"><span><b>합계</b></span><span class="t-kind"></span><span class="mono"><s>$657.90</s></span><span class="mono t-sale">$280.00</span></div>
+      </div>
+      <p class="t-note">2026년 11월 21일 판매 페이지 화면 기준입니다. 할인은 기간이 정해져 있어서 가격이 바뀔 수 있습니다.</p>
+    </div></div>
+  </section>
+</main>
+
+<!-- 화면 효과: 가장자리 색수차 → 블러, 그 위로 빛 번짐과 비네트 -->
+<div class="lens" aria-hidden="true">
+  <div class="lens-ca"></div>
+  <div class="lens-blur"></div>
+  <div class="lens-vignette"></div>
+  <div class="grain"></div>
+</div>
+
+<script>
+/* 02 막대를 누르면 오른쪽 창에 이미지 */
+const IMAGES = {
+  daw:    { src: 'img/daw.jpg',    tag: 'DAW',     desc: '녹음, 편집, 배치를 모두 하는 곳입니다. 이미 쓰고 있습니다(FL Studio).' },
+  plugin: { src: 'img/plugin.jpg', tag: 'PLUG-IN', desc: '악기 플러그인은 소리를 만들고, 이펙트 플러그인은 소리를 다듬습니다.' },
+  bundle: { src: 'img/bundle.jpg', tag: 'BUNDLE',  desc: '하나씩 사는 것보다 싸게, 여러 악기와 효과를 한 번에 삽니다. Komplete가 여기에 해당합니다.' },
+  reverb: { src: 'img/reverb.jpg', tag: 'REVERB',  desc: '화장실에서 노래하면 울리는 것처럼, 소리에 울림을 더합니다. Crystalline이 여기에 해당합니다.', fit: 'contain' }
+};
+(() => {
+  const bars = [...document.querySelectorAll('.bar')];
+  const viewer = document.getElementById('viewer');
+  Object.values(IMAGES).forEach(v => { const i = new Image(); i.src = v.src; });   // 미리 불러 두기
+  const show = (bar) => {
+    bars.forEach(b => b.classList.toggle('is-on', b === bar));
+    const it = IMAGES[bar.dataset.key];
+    const name = bar.querySelector('.li-name').textContent;
+    viewer.innerHTML = `<img src="${it.src}" alt="${it.tag}"${it.fit === 'contain' ? ' class="fit-contain"' : ''}>` +
+      `<div class="v-text"><h3>${name}</h3><p>${it.desc}</p></div>`;
+  };
+  bars.forEach(b => b.addEventListener('click', () => show(b)));
+  show(bars[0]);
+})();
+
+/* 배경 · 렌즈: 마우스를 부드럽게 따라간다 (white-grid.html) */
+(() => {
+  const root = document.documentElement;
+  const target = { x: 0, y: 0 }, cur = { x: 0, y: 0 };
+  addEventListener('pointermove', e => { target.x = e.clientX / innerWidth * 2 - 1; target.y = e.clientY / innerHeight * 2 - 1; });
+  document.addEventListener('pointerleave', () => { target.x = 0; target.y = 0; });
+  const ca = {};
+  document.querySelectorAll('[data-ca]').forEach(n => { ca[n.getAttribute('data-ca')] = n; });
+  function frame() {
+    cur.x += (target.x - cur.x) * 0.06;
+    cur.y += (target.y - cur.y) * 0.06;
+    root.style.setProperty('--px', cur.x.toFixed(4));
+    root.style.setProperty('--py', cur.y.toFixed(4));
+    const amt = 1 + Math.abs(cur.x) * 0.5 + Math.abs(cur.y) * 0.3;   // 아주 옅게 (원본 6+)
+    ca.r.setAttribute('dx', (-amt - cur.x * 0.3).toFixed(2));
+    ca.r.setAttribute('dy', (-cur.y * 0.3).toFixed(2));
+    ca.b.setAttribute('dx', (amt - cur.x * 0.3).toFixed(2));
+    ca.b.setAttribute('dy', (cur.y * 0.3).toFixed(2));
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+
+/* 요소별 마우스 반응: 마우스가 올라간 요소만 그쪽으로 살짝 기운다 */
+(() => {
+  if (!matchMedia('(hover: hover)').matches) return;
+  document.querySelectorAll('[data-inter]').forEach(el => {
+    el.addEventListener('pointermove', e => {
+      const r = el.getBoundingClientRect();
+      el.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 2 - 1).toFixed(3));
+      el.style.setProperty('--my', ((e.clientY - r.top) / r.height * 2 - 1).toFixed(3));
+      el.classList.add('is-hover');
+    });
+    el.addEventListener('pointerleave', () => {
+      el.classList.remove('is-hover');
+      el.style.setProperty('--mx', 0); el.style.setProperty('--my', 0);
+    });
+  });
+})();
+
+/* 01 웨이브테이블 — Crystalline 화면의 산 모양 파형을 흰 선으로 겹겹이 */
+(() => {
+  const svg = document.getElementById('wt');
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const L = 34, W = 470, P = 140;
+  const peaks = Array.from({ length: 9 }, () => ({ c: 0.18 + rnd() * 0.64, w: 0.03 + rnd() * 0.07, a: 0.35 + rnd() * 0.65 }));
+  let out = '';
+  for (let i = 0; i < L; i++) {
+    const k = i / (L - 1);
+    const ox = 230 - k * 190, oy = 70 + k * 150;
+    const env = Math.sin(Math.PI * (0.15 + 0.85 * k)) ** 1.4;
+    let d = '';
+    for (let j = 0; j <= P; j++) {
+      const u = j / P;
+      let h = 0;
+      peaks.forEach((q, n) => { const c = q.c + Math.sin(k * 3 + n) * 0.05; h += q.a * Math.exp(-((u - c) ** 2) / (2 * q.w * q.w)); });
+      h += 0.12 * Math.abs(Math.sin(u * 40 + k * 9)) * Math.exp(-((u - 0.5) ** 2) / 0.05);
+      const y = oy - h * 62 * env * Math.sin(Math.PI * u) ** 0.6;
+      d += (j ? ' L' : 'M') + (ox + u * W).toFixed(1) + ' ' + y.toFixed(1);
+    }
+    out += `<path d="${d} L760 ${oy.toFixed(1)}" stroke-opacity="${(0.22 + 0.78 * k ** 1.2).toFixed(3)}" stroke-width="${(0.9 + k * 0.9).toFixed(2)}"/>`;
+  }
+  svg.innerHTML = out;
+})();
+
+/* 지금 보고 있는 장의 목차를 켠다 */
+(() => {
+  const tabs = [...document.querySelectorAll('.tab')];
+  const secs = tabs.map(t => document.querySelector(t.getAttribute('href')));
+  const pick = () => {
+    const y = scrollY + 140;
+    let i = 0;
+    secs.forEach((s, k) => { if (s.offsetTop <= y) i = k; });
+    if (innerHeight + scrollY >= document.body.scrollHeight - 4) i = secs.length - 1;
+    tabs.forEach((t, k) => t.classList.toggle('is-on', k === i));
+  };
+  addEventListener('scroll', pick, { passive: true });
+  pick();
+})();
+
+/* 리버브 있음 / 없음 비교 재생 */
+(() => {
+  const PEAKS = {"dry":{"dur":4.61,"peaks":[1.0,0.605,0.514,0.453,0.407,0.358,0.311,0.268,0.251,0.218,0.178,0.144,0.156,0.14,0.102,0.058,0.083,0.077,0.067,0.069,0.091,0.094,0.065,0.065,0.056,0.064,0.056,0.063,0.063,0.037,0.044,0.03,0.045,0.038,0.032,0.03,0.033,0.028,0.025,0.036,0.033,0.022,0.029,0.03,0.03,0.032,0.027,0.027,0.026,0.023,0.022,0.021,0.023,0.023,0.021,0.021,0.017,0.019,0.016,0.011,0.016,0.016,0.01,0.011,0.011,0.012,0.016,0.009,0.009,0.011,0.007,0.011,0.01,0.009,0.009,0.008,0.008,0.008,0.008,0.007,0.007,0.006,0.006,0.007,0.006,0.005,0.005,0.006,0.006,0.005,0.006,0.006,0.005,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]},"reverb":{"dur":5.86,"peaks":[1.0,0.704,0.62,0.619,0.47,0.432,0.438,0.426,0.451,0.372,0.278,0.267,0.255,0.256,0.284,0.216,0.207,0.157,0.218,0.213,0.175,0.203,0.191,0.172,0.184,0.221,0.144,0.154,0.167,0.161,0.151,0.166,0.153,0.16,0.12,0.108,0.07,0.068,0.118,0.097,0.076,0.078,0.073,0.085,0.086,0.082,0.072,0.076,0.086,0.068,0.068,0.062,0.07,0.071,0.064,0.066,0.047,0.041,0.047,0.042,0.035,0.029,0.033,0.034,0.04,0.039,0.034,0.033,0.024,0.027,0.022,0.026,0.03,0.024,0.027,0.024,0.022,0.023,0.019,0.019,0.018,0.017,0.018,0.016,0.015,0.012,0.011,0.017,0.012,0.011,0.011,0.013,0.014,0.012,0.009,0.009,0.011,0.012,0.012,0.009,0.01,0.01,0.008,0.009,0.009,0.008,0.008,0.007,0.007,0.008,0.006,0.006,0.006,0.005,0.006,0.006,0.006,0.005]}};
+  const SPAN = 5.9;
+  const tracks = [...document.querySelectorAll('.track')];
+  let raf = 0;
+  const bars = (pk) => {
+    const n = pk.length, w = 1, gap = 0.6, H = 40;
+    let r = '';
+    pk.forEach((v, i) => { const h = Math.max(1.2, v * H); r += `<rect x="${(i * (w + gap)).toFixed(2)}" y="${((H - h) / 2).toFixed(2)}" width="${w}" height="${h.toFixed(2)}" rx="0.4"/>`; });
+    return `<svg viewBox="0 0 ${(n * (w + gap)).toFixed(1)} 40" preserveAspectRatio="none">${r}</svg>`;
+  };
+  const sizeTop = (tr) => { tr._top.firstElementChild.style.width = tr.querySelector('.wave').clientWidth + 'px'; };
+  tracks.forEach(tr => {
+    const d = PEAKS[tr.dataset.key];
+    const wave = tr.querySelector('.wave');
+    wave.innerHTML = `<div class="w-base">${bars(d.peaks)}</div><div class="w-top">${bars(d.peaks)}</div><span class="w-end" style="left:${(d.dur / SPAN * 100).toFixed(2)}%"></span><span class="w-hover"></span>`;
+    const hov = wave.querySelector('.w-hover');
+    wave.addEventListener('pointermove', e => { const r = wave.getBoundingClientRect(); hov.style.left = (e.clientX - r.left) + 'px'; });
+    const audio = new Audio(tr.dataset.src);
+    audio.preload = 'auto';
+    tr._audio = audio;
+    tr._top = wave.querySelector('.w-top');
+    sizeTop(tr);
+    const stopOthers = () => tracks.forEach(o => { if (o !== tr) { o._audio.pause(); o._audio.currentTime = 0; } });
+    tr.querySelector('.play').addEventListener('click', () => {
+      if (!audio.paused) { audio.pause(); return; }
+      stopOthers();
+      if (audio.ended || audio.currentTime >= audio.duration) audio.currentTime = 0;
+      audio.play().catch(() => {});
+    });
+    wave.addEventListener('click', e => {
+      const r = wave.getBoundingClientRect();
+      stopOthers();
+      audio.currentTime = Math.min(d.dur, (e.clientX - r.left) / r.width * SPAN);
+      audio.play().catch(() => {});
+    });
+    audio.addEventListener('play', () => { tr.classList.add('is-playing'); loop(); });
+    audio.addEventListener('pause', () => { tr.classList.remove('is-playing'); draw(); });
+    audio.addEventListener('ended', () => { tr.classList.remove('is-playing'); draw(); });
+  });
+  function draw() { tracks.forEach(tr => { tr._top.style.width = (tr._audio.currentTime / SPAN * 100).toFixed(3) + '%'; }); }
+  function loop() {
+    cancelAnimationFrame(raf);
+    const step = () => { draw(); if (tracks.some(t => !t._audio.paused)) raf = requestAnimationFrame(step); };
+    raf = requestAnimationFrame(step);
+  }
+  addEventListener('resize', () => tracks.forEach(sizeTop));
+})();
+</script>
+</body>
+</html>
